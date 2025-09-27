@@ -466,6 +466,8 @@ const App = () => {
     const [isGoalModalOpen, setGoalModalOpen] = useState(false);
     const [isUpdateProgressModalOpen, setUpdateProgressModalOpen] = useState(false);
     const [bookToUpdateProgress, setBookToUpdateProgress] = useState(null);
+    const [bookForQuote, setBookForQuote] = useState(null);
+    const [detailViewRefreshKey, setDetailViewRefreshKey] = useState(0);
 
     const showToast = (message, type = 'success') => {
         setToast({ message, type });
@@ -593,7 +595,7 @@ const App = () => {
     const renderContent = () => {
         if (isLoading && !selectedBookId) return <LoadingSpinner />;
         switch (activeTab) {
-            case 'dashboard': return <DashboardView stats={stats} goalProgress={goalProgress} recentBooks={recentBooks} readingBooks={readingBooks} recommendation={recommendation} isRecommending={isRecommending} onGetRecommendation={handleGetRecommendation} onAddRecommendationToWishlist={handleAddRecommendationToWishlist} onAddBook={() => setAddBookModalOpen(true)} onAddReview={() => setReviewModalOpen(true)} onAddQuote={() => setQuoteModalOpen(true)} onSetGoal={() => setGoalModalOpen(true)} onBookSelect={setSelectedBookId} onUpdateProgress={(book) => { setBookToUpdateProgress(book); setUpdateProgressModalOpen(true); }} />;
+            case 'dashboard': return <DashboardView stats={stats} goalProgress={goalProgress} recentBooks={recentBooks} readingBooks={readingBooks} recommendation={recommendation} isRecommending={isRecommending} onGetRecommendation={handleGetRecommendation} onAddRecommendationToWishlist={handleAddRecommendationToWishlist} onAddBook={() => setAddBookModalOpen(true)} onAddReview={() => setReviewModalOpen(true)} onAddQuote={() => { setBookForQuote(null); setQuoteModalOpen(true); }} onSetGoal={() => setGoalModalOpen(true)} onBookSelect={setSelectedBookId} onUpdateProgress={(book) => { setBookToUpdateProgress(book); setUpdateProgressModalOpen(true); }} />;
             case 'library': return <LibraryView books={libraryBooks} onBookSelect={setSelectedBookId} />;
             case 'wishlist': return <WishlistView books={wishlistBooks} onDataUpdate={handleDataUpdate} />;
             case 'quotes': return <QuotesView quotes={quotes} refreshQuotes={loadQuotes} showToast={showToast} />;
@@ -607,7 +609,7 @@ const App = () => {
             <Header />
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
                 {selectedBookId ? (
-                    <BookDetailView bookId={selectedBookId} onBack={() => setSelectedBookId(null)} onDataUpdate={handleDataUpdate} showToast={showToast} />
+                    <BookDetailView key={detailViewRefreshKey} bookId={selectedBookId} onBack={() => setSelectedBookId(null)} onDataUpdate={handleDataUpdate} showToast={showToast} onAddQuote={(book) => { setBookForQuote(book); setQuoteModalOpen(true); }} />
                 ) : (
                     <>
                         <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -617,7 +619,21 @@ const App = () => {
             </main>
             <AddBookModal isOpen={isAddBookModalOpen} onClose={() => setAddBookModalOpen(false)} onBookAdded={() => { handleDataUpdate(); showToast('책이 성공적으로 추가되었습니다!', 'success'); }} showToast={showToast} />
             <AddReviewModal isOpen={isReviewModalOpen} onClose={() => setReviewModalOpen(false)} onReviewAdded={() => { if(activeTab === 'stats') loadDetailedStats(); showToast('서평이 성공적으로 추가되었습니다!', 'success'); }} />
-            <AddQuoteModal isOpen={isQuoteModalOpen} onClose={() => setQuoteModalOpen(false)} onQuoteAdded={() => { if(activeTab === 'quotes') loadQuotes(); showToast('글귀가 성공적으로 추가되었습니다!', 'success'); }} />
+            <AddQuoteModal
+                isOpen={isQuoteModalOpen}
+                onClose={() => {
+                    setQuoteModalOpen(false);
+                    setBookForQuote(null);
+                }}
+                onQuoteAdded={() => {
+                    if (activeTab === 'quotes') loadQuotes();
+                    if (selectedBookId) {
+                        setDetailViewRefreshKey(k => k + 1);
+                    }
+                    showToast('글귀가 성공적으로 추가되었습니다!', 'success');
+                }}
+                defaultBook={bookForQuote}
+            />
             <SetGoalModal isOpen={isGoalModalOpen} onClose={() => setGoalModalOpen(false)} onGoalSet={() => { handleDataUpdate(); showToast('목표가 성공적으로 설정되었습니다!', 'success'); }} />
             <UpdateProgressModal isOpen={isUpdateProgressModalOpen} onClose={() => setUpdateProgressModalOpen(false)} book={bookToUpdateProgress} onProgressUpdated={() => { handleDataUpdate(); showToast('진행률이 업데이트되었습니다!', 'success'); }} />
             {toast && (<div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg text-white animate-slide-in-up ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>{toast.message}</div>)}
@@ -911,7 +927,7 @@ const CurrentlyReadingItem = ({ book, onUpdateProgress, onSelect }) => {
     );
 };
 
-const BookDetailView = ({ bookId, onBack, onDataUpdate, showToast }) => {
+const BookDetailView = ({ bookId, onBack, onDataUpdate, showToast, onAddQuote }) => {
     const [book, setBook] = useState(null);
     const [quotes, setQuotes] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -1030,7 +1046,13 @@ const BookDetailView = ({ bookId, onBack, onDataUpdate, showToast }) => {
                 </div>
                 <div className="lg:col-span-3">
                     <Card>
-                        <h2 className="text-xl font-bold mb-4">저장된 글귀</h2>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold">저장된 글귀</h2>
+                            <Button onClick={() => onAddQuote(book)} variant="secondary" className="!py-1.5 !px-3 !text-sm flex items-center gap-1">
+                                <PlusCircleIcon className="w-4 h-4" />
+                                글귀 추가
+                            </Button>
+                        </div>
                         {quotes.length > 0 ? (
                             <div className="space-y-4">
                                 {quotes.map(quote => (
@@ -1261,25 +1283,43 @@ const AddReviewModal = ({ isOpen, onClose, onReviewAdded }) => {
         </Modal>
     );
 };
-const AddQuoteModal = ({ isOpen, onClose, onQuoteAdded }) => {
+const AddQuoteModal = ({ isOpen, onClose, onQuoteAdded, defaultBook }) => {
     const [books, setBooks] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    useEffect(() => { if (isOpen) { apiService.getBooks(['completed', 'reading']).then(setBooks); } }, [isOpen]);
+    useEffect(() => {
+        if (isOpen && !defaultBook) {
+            apiService.getBooks(['completed', 'reading']).then(setBooks);
+        }
+    }, [isOpen, defaultBook]);
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
         const formData = new FormData(e.currentTarget);
         const data = Object.fromEntries(formData.entries());
+        const bookId = defaultBook ? defaultBook.id : data.bookId;
         try {
-            await apiService.addQuote({ bookId: data.bookId, quoteText: data.quoteText, pageNumber: Number(data.pageNumber) || undefined });
-            onQuoteAdded(); onClose();
+            await apiService.addQuote({ bookId: bookId, quoteText: data.quoteText, pageNumber: Number(data.pageNumber) || undefined });
+            onQuoteAdded();
+            onClose();
         } catch (err) { console.error(err); }
         finally { setIsSubmitting(false); }
     };
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="❝ 글귀 추가">
             <form onSubmit={handleSubmit}>
-                <Select label="책" id="bookId" name="bookId" required><option value="">책을 선택하세요...</option>{books.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}</Select>
+                {defaultBook ? (
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">책</label>
+                        <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-sm text-slate-600 truncate">
+                            {defaultBook.title}
+                        </div>
+                    </div>
+                ) : (
+                    <Select label="책" id="bookId" name="bookId" required>
+                        <option value="">책을 선택하세요...</option>
+                        {books.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
+                    </Select>
+                )}
                 <Textarea label="글귀" id="quoteText" name="quoteText" required />
                 <Input label="페이지 번호 (선택)" id="pageNumber" name="pageNumber" type="number" />
                 <Button type="submit" variant="secondary" className="w-full mt-4" isLoading={isSubmitting}>글귀 추가</Button>
