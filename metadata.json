@@ -1,0 +1,5 @@
+{
+  "name": "React Reading Log",
+  "description": "A modern web application to track your reading history, goals, and favorite quotes. Built with React and Tailwind CSS, this app provides a beautiful and intuitive interface to manage your literary journey, analyze your reading habits with insightful statistics, and even get AI-powered assistance for writing reviews.",
+  "requestFramePermissions": []
+}
