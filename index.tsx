@@ -46,6 +46,7 @@ class ReadingLogAPI {
   async getCompletedBooksStats() { return callApi('getCompletedBooksStats', {}); }
   // FIX: Provided empty payload for API calls that don't require one.
   async getDetailedStats() { return callApi('getDetailedStats', {}); }
+  async searchBooks(query) { return callApi('searchBooks', { query }); }
 }
 
 const apiService = new ReadingLogAPI();
@@ -1069,19 +1070,64 @@ const BookDetailView: React.FC<{ bookId: any, onBack: any, onDataUpdate: any, sh
 
 const AddBookModal = ({ isOpen, onClose, onBookAdded, showToast }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [status, setStatus] = useState('completed');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+
+    const initialFormData = {
+        title: '', author: '', status: 'completed',
+        completionDate: new Date().toISOString().split('T')[0],
+        startedDate: new Date().toISOString().split('T')[0],
+        pages: '', currentPage: '', publisher: '', tags: '',
+    };
+    const [formData, setFormData] = useState(initialFormData);
 
     useEffect(() => {
-        if(isOpen) {
-          setStatus('completed');
+        if (isOpen) {
+            setFormData(initialFormData);
+            setSearchQuery('');
+            setSearchResults([]);
+            setIsSearching(false);
         }
     }, [isOpen]);
+    
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSearch = async (e) => {
+        e.preventDefault();
+        if (!searchQuery.trim()) return;
+        setIsSearching(true);
+        setSearchResults([]);
+        try {
+            const results = await apiService.searchBooks(searchQuery);
+            setSearchResults(results || []);
+        } catch (err) {
+            console.error(err);
+            showToast('책 검색에 실패했습니다.', 'error');
+        } finally {
+            setIsSearching(false);
+        }
+    };
+    
+    const handleSelectBook = (book) => {
+        setFormData(prev => ({
+            ...prev,
+            title: book.title || '',
+            author: book.authors?.join(', ') || '',
+            publisher: book.publisher || '',
+            pages: book.pageCount || '',
+        }));
+        setSearchResults([]);
+        setSearchQuery('');
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
-        const formData = new FormData(e.currentTarget);
-        const data = Object.fromEntries(formData.entries());
+        const data = { ...formData };
         
         const completionDate = data.completionDate ? `${data.completionDate}T12:00:00.000Z` : undefined;
         const startedDate = data.startedDate ? `${data.startedDate}T12:00:00.000Z` : undefined;
@@ -1090,9 +1136,12 @@ const AddBookModal = ({ isOpen, onClose, onBookAdded, showToast }) => {
         try {
             await apiService.addBook({
                 title: data.title, author: data.author, status: data.status,
-                publisher: data.publisher || undefined, completionDate: completionDate,
-                startedDate: startedDate, pages: Number(data.pages) || undefined,
-                currentPage: Number(data.currentPage) || undefined, tags: tags.length > 0 ? tags : undefined,
+                publisher: data.publisher || undefined,
+                completionDate: data.status === 'completed' ? completionDate : undefined,
+                startedDate: data.status === 'reading' ? startedDate : undefined,
+                pages: Number(data.pages) || undefined,
+                currentPage: Number(data.currentPage) || undefined,
+                tags: tags.length > 0 ? tags : undefined,
             });
             onBookAdded(); onClose();
         } catch (err) { 
@@ -1104,20 +1153,47 @@ const AddBookModal = ({ isOpen, onClose, onBookAdded, showToast }) => {
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="+ 새 책 추가">
-            <form onSubmit={handleSubmit}>
-                <Input label="제목" id="title" name="title" type="text" required />
-                <Input label="저자" id="author" name="author" type="text" required />
-                 <Select label="독서 상태" id="status" name="status" value={status} onChange={(e) => setStatus(e.target.value)} required>
-                    <option value="completed">완독</option><option value="reading">읽는 중</option><option value="wishlist">읽고 싶은 책</option>
-                </Select>
-                {status === 'completed' && <Input label="완독일" id="completionDate" name="completionDate" type="date" required defaultValue={new Date().toISOString().split('T')[0]} />}
-                {status === 'reading' && <Input label="시작일" id="startedDate" name="startedDate" type="date" required defaultValue={new Date().toISOString().split('T')[0]} />}
-                {(status === 'completed' || status === 'reading') && <Input label="총 페이지 수" id="pages" name="pages" type="number" />}
-                {status === 'reading' && <Input label="현재 읽은 페이지" id="currentPage" name="currentPage" type="number" />}
-                <Input label="출판사" id="publisher" name="publisher" type="text" />
-                <Input label="태그 (쉼표로 구분)" id="tags" name="tags" type="text" placeholder="예: 소설, 프로그래밍, 자기계발" />
-                <Button type="submit" className="w-full mt-4" isLoading={isSubmitting}>책 추가</Button>
-            </form>
+            <div className="space-y-4">
+                <form onSubmit={handleSearch} className="flex gap-2">
+                    <SearchInput 
+                        placeholder="책 제목으로 검색..." 
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="flex-grow"
+                    />
+                    <Button type="submit" variant="secondary" isLoading={isSearching}>검색</Button>
+                </form>
+
+                {isSearching && <div className="py-4"><LoadingSpinner/></div>}
+                
+                {searchResults.length > 0 && (
+                    <div className="border rounded-lg max-h-60 overflow-y-auto">
+                        <ul className="divide-y divide-slate-200">
+                            {searchResults.map((book, index) => (
+                                <li key={book.id || index} className="p-3 hover:bg-slate-100 cursor-pointer" onClick={() => handleSelectBook(book)}>
+                                    <p className="font-semibold text-slate-800">{book.title}</p>
+                                    <p className="text-sm text-slate-500">{book.authors?.join(', ')}</p>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="border-t border-slate-200 pt-4 mt-4">
+                    <Input label="제목" id="title" name="title" type="text" required value={formData.title} onChange={handleInputChange} />
+                    <Input label="저자" id="author" name="author" type="text" required value={formData.author} onChange={handleInputChange} />
+                    <Select label="독서 상태" id="status" name="status" value={formData.status} onChange={handleInputChange} required>
+                        <option value="completed">완독</option><option value="reading">읽는 중</option><option value="wishlist">읽고 싶은 책</option>
+                    </Select>
+                    {formData.status === 'completed' && <Input label="완독일" id="completionDate" name="completionDate" type="date" required value={formData.completionDate} onChange={handleInputChange} />}
+                    {formData.status === 'reading' && <Input label="시작일" id="startedDate" name="startedDate" type="date" required value={formData.startedDate} onChange={handleInputChange} />}
+                    {(formData.status === 'completed' || formData.status === 'reading') && <Input label="총 페이지 수" id="pages" name="pages" type="number" value={formData.pages} onChange={handleInputChange} />}
+                    {formData.status === 'reading' && <Input label="현재 읽은 페이지" id="currentPage" name="currentPage" type="number" value={formData.currentPage} onChange={handleInputChange} />}
+                    <Input label="출판사" id="publisher" name="publisher" type="text" value={formData.publisher} onChange={handleInputChange} />
+                    <Input label="태그 (쉼표로 구분)" id="tags" name="tags" type="text" placeholder="예: 소설, 프로그래밍, 자기계발" value={formData.tags} onChange={handleInputChange} />
+                    <Button type="submit" className="w-full mt-4" isLoading={isSubmitting}>책 추가</Button>
+                </form>
+            </div>
         </Modal>
     );
 };

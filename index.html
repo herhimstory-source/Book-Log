@@ -2,6 +2,19 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        // Dynamically set the base href to solve pathing issues when deployed to a subdirectory.
+        const path = window.location.pathname;
+        const baseHref = path.substring(0, path.lastIndexOf('/') + 1);
+        if (baseHref && baseHref !== '/') {
+          const base = document.createElement('base');
+          base.href = baseHref;
+          // Prepend to ensure it's the first thing in head, affecting all subsequent relative paths.
+          document.head.prepend(base);
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath fill='%2360A5FA' d='M37 4H11C8.24 4 6 6.24 6 9v30c0 2.76 2.24 5 5 5h26c2.76 0 5-2.24 5-5V9c0-2.76-2.24-5-5-5z'/%3E%3Cpath fill='%23FFFFFF' d='M37 4H11C8.24 4 6 6.24 6 9v30c0 2.76 2.24 5 5 5h26c2.76 0 5-2.24 5-5V9c0-2.76-2.24-5-5-5zM22 10h11v2H22v-2zm11 5H22v2h11v-2zm-15 0h2v2h-2v-2zm15 5H22v2h11v-2zm-15 0h2v2h-2v-2zm15 5H22v2h11v-2zm-15 0h2v2h-2v-2z'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>나의 독서 기록</title>
