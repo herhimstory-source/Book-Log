@@ -2,6 +2,77 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
+// ============== Error Boundary ==============
+// FIX: Added Props and State types for ErrorBoundary component
+interface ErrorBoundaryProps {
+    children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+    hasError: boolean;
+    error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    // 다음 렌더링에서 폴백 UI가 보이도록 상태를 업데이트 합니다.
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // 에러 리포팅 서비스에 에러를 기록할 수도 있습니다.
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      // 커스텀 폴백 UI를 렌더링할 수 있습니다.
+      return (
+        <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'sans-serif', color: '#334155' }}>
+          <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold' }}>문제가 발생했습니다.</h1>
+          <p style={{ marginTop: '0.5rem' }}>예상치 못한 오류가 발생하여 애플리케이션을 표시할 수 없습니다.</p>
+          <p style={{ 
+            color: '#dc2626', 
+            backgroundColor: '#fee2e2', 
+            border: '1px solid #ef4444', 
+            padding: '1rem', 
+            marginTop: '1.5rem', 
+            textAlign: 'left', 
+            whiteSpace: 'pre-wrap',
+            borderRadius: '0.5rem',
+            fontFamily: 'monospace',
+            fontSize: '0.875rem'
+          }}>
+            {this.state.error && this.state.error.toString()}
+          </p>
+          <button 
+            onClick={() => window.location.reload()} 
+            style={{ 
+                marginTop: '1.5rem', 
+                padding: '0.75rem 1.5rem', 
+                cursor: 'pointer', 
+                fontWeight: '600',
+                color: 'white',
+                backgroundColor: '#2563eb',
+                border: 'none',
+                borderRadius: '0.5rem'
+            }}>
+            페이지 새로고침
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+
 // ============== services/apiService.ts ==============
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwYpSV3UBL_zD1zmvX5xHSHBCWX_Rv7L9eUCNeHzVQc_Kv-pqEHDwHFtAvzXUJgzpw5Ow/exec";
 
@@ -167,7 +238,14 @@ const Card: React.FC<{ children?: React.ReactNode, className?: string, onClick?:
         {children}
     </div>
 );
-const Button = forwardRef(
+// FIX: Added props type for Button component
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+    children: React.ReactNode;
+    variant?: 'primary' | 'secondary' | 'danger' | 'success';
+    isLoading?: boolean;
+}
+
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ({ children, variant = 'primary', isLoading = false, className = '', ...props }, ref) => {
         const baseClasses = "inline-flex items-center justify-center font-semibold rounded-lg px-5 py-2.5 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
         const variantClasses = {
@@ -193,9 +271,15 @@ const Button = forwardRef(
         );
     }
 );
-const Input = forwardRef(({ label, id, type, className, ...props }, ref) => {
-    const internalRef = useRef(null);
-    useImperativeHandle(ref, () => internalRef.current);
+// FIX: Added props type for Input component
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+    label: string;
+    id: string;
+}
+
+const Input = forwardRef<HTMLInputElement, InputProps>(({ label, id, type, className, ...props }, ref) => {
+    const internalRef = useRef<HTMLInputElement>(null);
+    useImperativeHandle(ref, () => internalRef.current!);
     const showPicker = () => {
         if (internalRef.current?.showPicker) {
             internalRef.current.showPicker();
@@ -232,13 +316,26 @@ const Input = forwardRef(({ label, id, type, className, ...props }, ref) => {
         </div>
     );
 });
-const Textarea = forwardRef(({ label, id, ...props }, ref) => (
+// FIX: Added props type for Textarea component
+interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+    label: string;
+    id: string;
+}
+
+const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(({ label, id, ...props }, ref) => (
      <div className="mb-4">
         <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
         <textarea ref={ref} id={id} rows={4} className="block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" {...props} />
     </div>
 ));
-const Select = forwardRef(({ label, id, children, ...props }, ref) => (
+// FIX: Added props type for Select component
+interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+    label: string;
+    id: string;
+    children: React.ReactNode;
+}
+
+const Select = forwardRef<HTMLSelectElement, SelectProps>(({ label, id, children, ...props }, ref) => (
      <div className="mb-4">
         <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
         <select ref={ref} id={id} className="block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" {...props}>
@@ -246,7 +343,12 @@ const Select = forwardRef(({ label, id, children, ...props }, ref) => (
         </select>
     </div>
 ));
-const SearchInput = forwardRef(({ className, ...props }, ref) => (
+// FIX: Added props type for SearchInput component
+interface SearchInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+    className?: string;
+}
+
+const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(({ className, ...props }, ref) => (
     <div className={`relative w-full ${className}`}>
         <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
             <SearchIcon className="w-5 h-5 text-slate-400" />
@@ -470,6 +572,8 @@ const App = () => {
         } catch (error) {
             showToast('초기 데이터를 불러오지 못했습니다.', 'error');
             console.error(error);
+            // Throw the error again to be caught by the ErrorBoundary
+            throw error;
         } finally {
             setIsLoading(false);
         }
@@ -719,9 +823,11 @@ const DashboardView = ({ stats, goalProgress, recentBooks, readingBooks, recomme
 );
 const LibraryView = ({ books, onBookSelect }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedTag, setSelectedTag] = useState(null);
+    // FIX: Explicitly typed the state for selectedTag.
+    const [selectedTag, setSelectedTag] = useState<string | null>(null);
     const allTags = useMemo(() => {
-        const tagSet = new Set();
+        // FIX: Explicitly typed the Set to handle strings.
+        const tagSet = new Set<string>();
         books.forEach(book => book.tags?.forEach(tag => tagSet.add(tag)));
         return Array.from(tagSet).sort();
     }, [books]);
@@ -1427,6 +1533,8 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   // FIX: React was used but not defined/imported. The import at the top of the file fixes this.
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
