@@ -74,7 +74,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 
 // ============== services/apiService.ts ==============
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby8xdWQCkzl4qJwbnbZQYxvmhswqeR-_CcJcB5So4RPM2sU2sXvQcjpG75OcVKexV2x/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxd46CuHBfFtAe6UuJjIdBfuumY8TS5xfOmphygjZDTu2dueT4_JdYxu3T9J-3qGSv8Dw/exec";
 
 async function handleApiResponse(response) {
     if (!response.ok) {
