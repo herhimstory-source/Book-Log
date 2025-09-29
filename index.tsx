@@ -74,27 +74,38 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 
 // ============== services/apiService.ts ==============
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwYpSV3UBL_zD1zmvX5xHSHBCWX_Rv7L9eUCNeHzVQc_Kv-pqEHDwHFtAvzXUJgzpw5Ow/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby8xdWQCkzl4qJwbnbZQYxvmhswqeR-_CcJcB5So4RPM2sU2sXvQcjpG75OcVKexV2x/exec";
 
 async function handleApiResponse(response) {
     if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`서버 응답 오류: ${response.status} ${response.statusText}. 백엔드 스크립트 로그를 확인해주세요.`);
     }
     const result = await response.json();
     if (!result.success) {
         console.error("API Error:", result.error);
-        throw new Error(result.error || 'An unknown API error occurred');
+        throw new Error(result.error || '백엔드에서 알 수 없는 오류가 발생했습니다.');
     }
     return result.data;
 }
 
 async function callApi(action, payload) {
-    const response = await fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action, payload })
-    });
-    return handleApiResponse(response);
+    try {
+        const response = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action, payload })
+        });
+        return handleApiResponse(response);
+    } catch (error) {
+        console.error(`API call failed for action "${action}":`, error);
+        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+             throw new Error(
+                '데이터를 불러오는 데 실패했습니다 (네트워크 오류). ' +
+                'CORS 설정이나 인터넷 연결을 확인해주세요. ' +
+                'Google Apps Script 백엔드가 올바르게 배포되었고 "모든 사용자"에게 액세스 권한이 있는지 확인하세요.'
+             );
+        }
+        throw error;
+    }
 }
 
 class ReadingLogAPI {
