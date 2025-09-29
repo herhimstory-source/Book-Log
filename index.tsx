@@ -836,23 +836,53 @@ const LibraryView = ({ books, onBookSelect }) => {
     const [searchTerm, setSearchTerm] = useState('');
     // FIX: Explicitly typed the state for selectedTag.
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
+
+    // Helper to ensure tags are always an array, handling both array and comma-separated string formats.
+    const getTagsAsArray = (tags) => {
+        if (Array.isArray(tags)) {
+            return tags;
+        }
+        if (typeof tags === 'string' && tags.trim()) {
+            return tags.split(',').map(t => t.trim()).filter(Boolean);
+        }
+        return [];
+    };
+
     const allTags = useMemo(() => {
         // FIX: Explicitly typed the Set to handle strings.
         const tagSet = new Set<string>();
-        books.forEach(book => book.tags?.forEach(tag => tagSet.add(tag)));
+        books.forEach(book => {
+            const bookTags = getTagsAsArray(book.tags);
+            bookTags.forEach(tag => tagSet.add(tag));
+        });
         return Array.from(tagSet).sort();
     }, [books]);
+
     const filteredBooks = useMemo(() => {
-        let tempBooks = books;
+        // Separate books into 'reading' and 'completed'
+        const readingBooks = books.filter(b => b.status === 'reading');
+        const completedBooks = books.filter(b => b.status === 'completed');
+
+        // Sort completed books alphabetically by title. 'ko' helps with Korean sorting.
+        completedBooks.sort((a, b) => a.title.localeCompare(b.title, 'ko'));
+
+        // Combine the lists, with 'reading' books appearing first, followed by sorted 'completed' books.
+        let tempBooks = [...readingBooks, ...completedBooks];
+
+        // Apply search and tag filters
         if (searchTerm) {
             const lowerCaseSearchTerm = searchTerm.toLowerCase();
             tempBooks = tempBooks.filter(b => b.title.toLowerCase().includes(lowerCaseSearchTerm) || b.author.toLowerCase().includes(lowerCaseSearchTerm));
         }
         if (selectedTag) {
-            tempBooks = tempBooks.filter(b => b.tags?.includes(selectedTag));
+            tempBooks = tempBooks.filter(b => {
+                 const bookTags = getTagsAsArray(b.tags);
+                 return bookTags.includes(selectedTag);
+            });
         }
         return tempBooks;
     }, [books, searchTerm, selectedTag]);
+
     return (
         <Card className="animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -869,19 +899,22 @@ const LibraryView = ({ books, onBookSelect }) => {
             )}
             {filteredBooks.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {filteredBooks.map(book => (
-                        <Card key={book.id} className="flex flex-col justify-between" onClick={() => onBookSelect(book.id)}>
-                            <div>
-                                <div className="flex justify-between items-start mb-1">
-                                    <h3 className="font-bold text-md text-slate-800 pr-2">{book.title}</h3>
-                                    {book.status === 'reading' && (<span className="flex-shrink-0 bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">읽는 중</span>)}
-                                    {book.status === 'completed' && (<span className="flex-shrink-0 bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">완독</span>)}
+                    {filteredBooks.map(book => {
+                        const bookTags = getTagsAsArray(book.tags); // Normalize tags for rendering
+                        return (
+                            <Card key={book.id} className="flex flex-col justify-between" onClick={() => onBookSelect(book.id)}>
+                                <div>
+                                    <div className="flex justify-between items-start mb-1">
+                                        <h3 className="font-bold text-md text-slate-800 pr-2">{book.title}</h3>
+                                        {book.status === 'reading' && (<span className="flex-shrink-0 bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">읽는 중</span>)}
+                                        {book.status === 'completed' && (<span className="flex-shrink-0 bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">완독</span>)}
+                                    </div>
+                                    <p className="text-slate-500 text-sm mb-4">{book.author}</p>
                                 </div>
-                                <p className="text-slate-500 text-sm mb-4">{book.author}</p>
-                            </div>
-                            {book.tags && book.tags.length > 0 && (<div className="flex flex-wrap gap-1.5">{book.tags.slice(0, 3).map(tag => <TagBadge key={tag} tag={tag} />)}</div>)}
-                        </Card>
-                    ))}
+                                {bookTags && bookTags.length > 0 && (<div className="flex flex-wrap gap-1.5">{bookTags.slice(0, 3).map(tag => <TagBadge key={tag} tag={tag} />)}</div>)}
+                            </Card>
+                        );
+                    })}
                 </div>
             // FIX: Provided null for the action prop when not used.
             ) : ( <EmptyState title="책을 찾을 수 없습니다" message={searchTerm || selectedTag ? "다른 검색어나 필터를 시도해보세요." : "읽은 책을 목록에 추가하세요!"} action={null}/> )}
