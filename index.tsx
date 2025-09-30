@@ -14,6 +14,9 @@ interface ErrorBoundaryState {
 }
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // FIX: Declare state as a class property to resolve errors about 'state' not existing on the type 'ErrorBoundary'.
+  state: ErrorBoundaryState;
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -149,6 +152,16 @@ const getBookRecommendation = async ( existingBooks ) => {
 const formatDate = (dateString) => {
     if (!dateString || typeof dateString !== 'string') return '';
     return dateString.split('T')[0];
+};
+
+const getTagsAsArray = (tags) => {
+    if (Array.isArray(tags)) {
+        return tags;
+    }
+    if (typeof tags === 'string' && tags.trim()) {
+        return tags.split(',').map(t => t.trim()).filter(Boolean);
+    }
+    return [];
 };
 
 // ============== components/ui.tsx ==============
@@ -837,17 +850,6 @@ const LibraryView = ({ books, onBookSelect }) => {
     // FIX: Explicitly typed the state for selectedTag.
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-    // Helper to ensure tags are always an array, handling both array and comma-separated string formats.
-    const getTagsAsArray = (tags) => {
-        if (Array.isArray(tags)) {
-            return tags;
-        }
-        if (typeof tags === 'string' && tags.trim()) {
-            return tags.split(',').map(t => t.trim()).filter(Boolean);
-        }
-        return [];
-    };
-
     const allTags = useMemo(() => {
         // FIX: Explicitly typed the Set to handle strings.
         const tagSet = new Set<string>();
@@ -1146,6 +1148,7 @@ const BookDetailView: React.FC<{ bookId: any, onBack: any, onDataUpdate: any, sh
     if (!book) return <EmptyState title="책을 찾을 수 없습니다" message="목록으로 돌아가 다시 시도해주세요." action={<Button onClick={onBack}>목록으로 돌아가기</Button>} />;
     
     const progress = book.pages && book.currentPage ? Math.round((book.currentPage / book.pages) * 100) : 0;
+    const bookTags = getTagsAsArray(book.tags);
 
     return (
         <div className="animate-fade-in">
@@ -1172,7 +1175,7 @@ const BookDetailView: React.FC<{ bookId: any, onBack: any, onDataUpdate: any, sh
                         <div><p className="text-slate-500">{book.status === 'completed' ? '완독일' : '시작일'}</p><p className="font-semibold">{formatDate(book.completionDate || book.startedDate) || '-'}</p></div>
                         <div><p className="text-slate-500">페이지</p><p className="font-semibold">{book.pages ? `${book.pages}쪽` : '-'}</p></div>
                     </div>
-                    {book.tags && book.tags.length > 0 && (<div className="mt-4 flex flex-wrap gap-2">{book.tags.map(tag => <TagBadge key={tag} tag={tag} />)}</div>)}
+                    {bookTags.length > 0 && (<div className="mt-4 flex flex-wrap gap-2">{bookTags.map(tag => <TagBadge key={tag} tag={tag} />)}</div>)}
                      {book.status === 'reading' && (
                         <div className="mt-6 border-t pt-6">
                             <h3 className="text-sm font-medium text-slate-700 mb-2">독서 진행률</h3>
@@ -1403,7 +1406,7 @@ const EditBookModal = ({ isOpen, onClose, onBookUpdated, book, showToast }) => {
                 {(book.status === 'completed' || book.status === 'reading') && <Input label="총 페이지 수" id="pages" name="pages" type="number" defaultValue={book.pages} />}
                 {book.status === 'reading' && <Input label="현재 읽은 페이지" id="currentPage" name="currentPage" type="number" defaultValue={book.currentPage} />}
                 <Input label="출판사" id="publisher" name="publisher" type="text" defaultValue={book.publisher} />
-                <Input label="태그 (쉼표로 구분)" id="tags" name="tags" type="text" defaultValue={book.tags?.join(', ')} placeholder="예: 소설, 프로그래밍" />
+                <Input label="태그 (쉼표로 구분)" id="tags" name="tags" type="text" defaultValue={getTagsAsArray(book.tags).join(', ')} placeholder="예: 소설, 프로그래밍" />
                 <Button type="submit" className="w-full mt-4" isLoading={isSubmitting}>수정 완료</Button>
             </form>
         </Modal>
