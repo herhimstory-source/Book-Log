@@ -1,0 +1,23 @@
+{
+  "name": "나의 독서 기록",
+  "short_name": "독서 기록",
+  "description": "나만의 서재를 손쉽게 관리하고, 독서 습관을 분석하며, AI 추천까지 받아보세요.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#4338ca",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -4,9 +4,8 @@ import ReactDOM from 'react-dom/client';
 
 // ============== Error Boundary ==============
 // FIX: Added Props and State types for ErrorBoundary component
-interface ErrorBoundaryProps {
-    children: React.ReactNode;
-}
+// FIX: Use React.PropsWithChildren to correctly type props with children and resolve type inference issues.
+type ErrorBoundaryProps = React.PropsWithChildren<{}>;
 
 interface ErrorBoundaryState {
     hasError: boolean;
@@ -16,6 +15,8 @@ interface ErrorBoundaryState {
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   // FIX: Declare state as a class property to resolve errors about 'state' not existing on the type 'ErrorBoundary'.
   state: ErrorBoundaryState;
+  // FIX: Declare props as a class property to resolve errors about 'props' not existing on the type 'ErrorBoundary'.
+  props: ErrorBoundaryProps;
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -77,24 +78,38 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 
 // ============== services/apiService.ts ==============
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxd46CuHBfFtAe6UuJjIdBfuumY8TS5xfOmphygjZDTu2dueT4_JdYxu3T9J-3qGSv8Dw/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbySg84j14pCGMHdQB7EUVu30nv4S5Hyf7yIHVBthGgMzZ9WFIHNd8QCnAsIuRYrn5XpmA/exec";
 
 async function handleApiResponse(response) {
     if (!response.ok) {
-        throw new Error(`서버 응답 오류: ${response.status} ${response.statusText}. 백엔드 스크립트 로그를 확인해주세요.`);
+        const errorText = await response.text();
+        console.error("Server error response:", errorText);
+        throw new Error(`서버 응답 오류: ${response.status} ${response.statusText}. 백엔드 스크립트 로그와 브라우저 콘솔을 확인해주세요.`);
     }
-    const result = await response.json();
-    if (!result.success) {
-        console.error("API Error:", result.error);
-        throw new Error(result.error || '백엔드에서 알 수 없는 오류가 발생했습니다.');
+    const resultText = await response.text();
+    if (!resultText) {
+        return []; // Handle empty response gracefully
     }
-    return result.data;
+    try {
+        const result = JSON.parse(resultText);
+        if (!result.success) {
+            console.error("API Error:", result.error);
+            throw new Error(result.error || '백엔드에서 알 수 없는 오류가 발생했습니다.');
+        }
+        return result.data;
+    } catch (e) {
+        console.error("Failed to parse API response as JSON:", resultText);
+        throw new Error(`서버로부터 받은 응답을 파싱할 수 없습니다. 응답이 유효한 JSON 형식이 아닙니다. 받은 응답: ${resultText.substring(0, 200)}`);
+    }
 }
 
 async function callApi(action, payload) {
     try {
         const response = await fetch(SCRIPT_URL, {
             method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+            },
             body: JSON.stringify({ action, payload })
         });
         return handleApiResponse(response);
@@ -118,8 +133,7 @@ class ReadingLogAPI {
   async addBook(data) { return callApi('addBook', data); }
   async updateBook(bookId, data) { return callApi('updateBook', { bookId, data }); }
   async deleteBook(bookId) { return callApi('deleteBook', { bookId }); }
-  // FIX: Made limit parameter optional and provided a default value safely.
-  async getQuotes(limit?) { return callApi('getQuotes', { limit: limit === undefined ? 50 : limit }); }
+  async getQuotes() { return callApi('getQuotes', {}); }
   async getQuotesByBookId(bookId) { return callApi('getQuotesByBookId', { bookId }); }
   async addQuote(data) { return callApi('addQuote', data); }
   async updateQuote(quoteId, data) { return callApi('updateQuote', { quoteId, data }); }
@@ -131,22 +145,10 @@ class ReadingLogAPI {
   async getCompletedBooksStats() { return callApi('getCompletedBooksStats', {}); }
   // FIX: Provided empty payload for API calls that don't require one.
   async getDetailedStats() { return callApi('getDetailedStats', {}); }
-  async searchBooks(query) { return callApi('searchBooks', { query }); }
 }
 
 const apiService = new ReadingLogAPI();
 
-
-// ============== services/geminiService.ts ==============
-const getBookRecommendation = async ( existingBooks ) => {
-   try {
-    const recommendation = await callApi('getBookRecommendation', { existingBooks });
-    return recommendation;
-  } catch (error) {
-    console.error("Error getting recommendation:", error);
-    throw new Error("AI 추천 생성 중 오류가 발생했습니다.");
-  }
-};
 
 // ============== utils/helpers.ts ==============
 const formatDate = (dateString) => {
@@ -176,11 +178,6 @@ const BookOpenIcon = ({ className = "w-6 h-6" }) => (
 const ChartBarIcon = ({ className = "w-6 h-6" }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-    </svg>
-);
-const SparklesIcon = ({ className = "w-5 h-5" }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
-        <path fillRule="evenodd" d="M10.868 2.884c.321-.772.117-1.623-.458-2.11L10 0l-.41.774c-.575.487-.779 1.338-.458 2.11L10.868 2.884zM12.5 5.5a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2a.5.5 0 01.5-.5zM8.5 5.5a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2a.5.5 0 01.5-.5zM5 7.5a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2a.5.5 0 01.5-.5zM15 7.5a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2a.5.5 0 01.5-.5zM2.884 9.132c.772.321 1.623.117 2.11-.458L5.774 8.25l-.774.41c-.487.575-1.338.779-2.11.458L2.884 9.132zM17.116 9.132c-.772.321-1.623.117-2.11-.458L14.226 8.25l.774.41c.487.575 1.338.779 2.11.458l.01.02zM9.132 17.116c.321-.772.117-1.623-.458-2.11L8.25 14.226l-.41.774c-.575.487-.779 1.338-.458 2.11l.02.01zM10.868 17.116c-.321-.772-.117-1.623.458-2.11l.41-.774.41.774c.575.487.779 1.338.458 2.11l-.02.01z" clipRule="evenodd" />
     </svg>
 );
 const PencilIcon = ({ className = "w-5 h-5" }) => (
@@ -252,7 +249,7 @@ const EmptyState = ({ title, message, action }) => (
         {action && <div className="mt-6">{action}</div>}
     </div>
 );
-// FIX: Made onClick prop optional by providing a default value.
+// FIX: Made onClick prop optional by provided a default value.
 // FIX: Explicitly type Card as a React Functional Component to fix issues with `children` and `key` props.
 const Card: React.FC<{ children?: React.ReactNode, className?: string, onClick?: any }> = ({ children, className = '', onClick = null }) => (
     <div
@@ -555,10 +552,8 @@ const App = () => {
     const [allBooks, setAllBooks] = useState([]);
     const [quotes, setQuotes] = useState([]);
     const [detailedStats, setDetailedStats] = useState(null);
-    const [recommendation, setRecommendation] = useState(null);
-    const [isRecommending, setIsRecommending] = useState(false);
     // FIX: Used `.getTime()` for proper date comparison.
-    const recentBooks = useMemo(() => allBooks.filter(b => b.status === 'completed' && b.completionDate).sort((a,b) => new Date(b.completionDate).getTime() - new Date(a.completionDate).getTime()).slice(0, 6), [allBooks]);
+    const recentBooks = useMemo(() => allBooks.filter(b => b.status === 'completed' && b.completionDate).sort((a,b) => new Date(b.completionDate).getTime() - new Date(a.completionDate).getTime()).slice(0, 15), [allBooks]);
     const readingBooks = useMemo(() => allBooks.filter(b => b.status === 'reading'), [allBooks]);
     const libraryBooks = useMemo(() => allBooks.filter(b => b.status === 'completed' || b.status === 'reading'), [allBooks]);
     const wishlistBooks = useMemo(() => allBooks.filter(b => b.status === 'wishlist'), [allBooks]);
@@ -585,14 +580,16 @@ const App = () => {
     const loadInitialData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [statsData, goalData, booksData] = await Promise.all([
+            const [statsData, goalData, booksData, quotesData] = await Promise.all([
                 apiService.getCompletedBooksStats(),
                 apiService.getReadingGoalProgress(new Date().getFullYear(), new Date().getMonth() + 1),
-                apiService.getBooks()
+                apiService.getBooks(),
+                apiService.getQuotes()
             ]);
             setStats(statsData);
             setGoalProgress(goalData);
             setAllBooks(booksData);
+            setQuotes(quotesData);
         } catch (error) {
             showToast('초기 데이터를 불러오지 못했습니다.', 'error');
             console.error(error);
@@ -615,9 +612,12 @@ const App = () => {
     const loadQuotes = useCallback(async () => {
         setIsLoading(true);
         try {
-            const quotes = await apiService.getQuotes();
-            setQuotes(quotes);
-        } catch (err) { showToast('글귀 목록을 불러오지 못했습니다.', 'error'); }
+            const quotesData = await apiService.getQuotes();
+            setQuotes(quotesData);
+        } catch (err) { 
+            showToast('글귀 목록을 불러오지 못했습니다.', 'error'); 
+            console.error(err);
+        }
         finally { setIsLoading(false); }
     }, []);
 
@@ -641,7 +641,7 @@ const App = () => {
             setStats(statsData);
             setAllBooks(booksData);
             setGoalProgress(goalData);
-            if (activeTab === 'quotes') loadQuotes();
+            loadQuotes();
             if (activeTab === 'stats') loadDetailedStats();
         } catch (error) {
             showToast('데이터 업데이트에 실패했습니다.', 'error');
@@ -651,42 +651,6 @@ const App = () => {
         }
     }, [activeTab, loadQuotes, loadDetailedStats]);
     
-    const handleGetRecommendation = useCallback(async () => {
-        setIsRecommending(true);
-        setRecommendation(null);
-        try {
-            const completedBooks = allBooks.filter(b => b.status === 'completed').map(b => b.title);
-            if (completedBooks.length === 0) {
-                showToast('추천을 받으려면 완독한 책이 한 권 이상 있어야 합니다.', 'error');
-                return;
-            }
-            const rec = await getBookRecommendation(completedBooks);
-            setRecommendation(rec);
-        } catch (error) {
-            showToast('AI 추천을 받아오는 데 실패했습니다.', 'error');
-            console.error(error);
-        } finally {
-            setIsRecommending(false);
-        }
-    }, [allBooks]);
-
-    const handleAddRecommendationToWishlist = useCallback(async () => {
-        if (!recommendation) return;
-        try {
-            await apiService.addBook({
-                title: recommendation.title,
-                author: recommendation.author,
-                status: 'wishlist',
-            });
-            showToast(`'${recommendation.title}'을(를) 읽고 싶은 책 목록에 추가했습니다.`, 'success');
-            setRecommendation(null);
-            handleDataUpdate();
-        } catch (error) {
-            showToast('책을 위시리스트에 추가하는 데 실패했습니다.', 'error');
-            console.error(error);
-        }
-    }, [recommendation, handleDataUpdate]);
-
     useEffect(() => {
         loadInitialData();
     }, [loadInitialData]);
@@ -705,7 +669,7 @@ const App = () => {
     const renderContent = () => {
         if (isLoading && !selectedBookId) return <LoadingSpinner />;
         switch (activeTab) {
-            case 'dashboard': return <DashboardView stats={stats} goalProgress={goalProgress} recentBooks={recentBooks} readingBooks={readingBooks} recommendation={recommendation} isRecommending={isRecommending} onGetRecommendation={handleGetRecommendation} onAddRecommendationToWishlist={handleAddRecommendationToWishlist} onAddBook={() => setAddBookModalOpen(true)} onAddReview={() => setReviewModalOpen(true)} onAddQuote={() => { setBookForQuote(null); setQuoteModalOpen(true); }} onSetGoal={() => setGoalModalOpen(true)} onBookSelect={setSelectedBookId} onUpdateProgress={(book) => { setBookToUpdateProgress(book); setUpdateProgressModalOpen(true); }} />;
+            case 'dashboard': return <DashboardView stats={stats} goalProgress={goalProgress} recentBooks={recentBooks} readingBooks={readingBooks} onAddBook={() => setAddBookModalOpen(true)} onAddReview={() => setReviewModalOpen(true)} onAddQuote={() => { setBookForQuote(null); setQuoteModalOpen(true); }} onSetGoal={() => setGoalModalOpen(true)} onBookSelect={setSelectedBookId} onUpdateProgress={(book) => { setBookToUpdateProgress(book); setUpdateProgressModalOpen(true); }} />;
             case 'library': return <LibraryView books={libraryBooks} onBookSelect={setSelectedBookId} />;
             case 'wishlist': return <WishlistView books={wishlistBooks} onDataUpdate={handleDataUpdate} />;
             case 'quotes': return <QuotesView quotes={quotes} refreshQuotes={loadQuotes} showToast={showToast} />;
@@ -718,7 +682,7 @@ const App = () => {
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
             <Header />
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-                <TabNavigation activeTab={activeTab} setActiveTab={handleTabChange} />
+                <TabNavigation activeTab={activeTab} setActiveTab={handleTabChange} quotesCount={quotes.length} />
                 <div className="mt-8">
                     {selectedBookId ? (
 // FIX: Explicitly type BookDetailView as a React Functional Component to fix issues with `key` prop.
@@ -737,7 +701,7 @@ const App = () => {
                     setBookForQuote(null);
                 }}
                 onQuoteAdded={() => {
-                    if (activeTab === 'quotes') loadQuotes();
+                    loadQuotes();
                     if (selectedBookId) {
                         setDetailViewRefreshKey(k => k + 1);
                     }
@@ -761,10 +725,10 @@ const Header = () => (
     </header>
 );
 
-const TabNavigation = ({ activeTab, setActiveTab }) => {
+const TabNavigation = ({ activeTab, setActiveTab, quotesCount }) => {
     const tabs = [
         { id: 'dashboard', name: '대시보드' }, { id: 'library', name: '내 서재' }, { id: 'wishlist', name: '읽고 싶은 책' },
-        { id: 'quotes', name: '글귀 모음' }, { id: 'stats', name: '통계' },
+        { id: 'quotes', name: `글귀 모음 (${quotesCount})` }, { id: 'stats', name: '통계' },
     ];
     return (
         <div className="bg-white rounded-xl shadow-sm p-2 -mt-12 sticky top-4 z-40">
@@ -780,84 +744,121 @@ const TabNavigation = ({ activeTab, setActiveTab }) => {
     );
 };
 
-const DashboardView = ({ stats, goalProgress, recentBooks, readingBooks, recommendation, isRecommending, onGetRecommendation, onAddRecommendationToWishlist, onAddBook, onAddReview, onAddQuote, onSetGoal, onBookSelect, onUpdateProgress }) => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
-        <div className="lg:col-span-2 space-y-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard label="총 완독" value={stats?.completedBooks} />
-                <StatCard label="올해 완독" value={stats?.thisYearBooks} />
-                <StatCard label="이달 완독" value={stats?.thisMonthBooks} />
-                <StatCard label="총 페이지" value={stats?.totalPages?.toLocaleString()} />
-            </div>
-            <Card>
-                <h2 className="text-xl font-bold mb-4">읽고 있는 책</h2>
-                {readingBooks.length > 0 ? (
-// FIX: Explicitly type CurrentlyReadingItem as a React Functional Component to fix issues with `key` prop.
-                    <div className="space-y-4">{readingBooks.map(book => (<CurrentlyReadingItem key={book.id} book={book} onUpdateProgress={() => onUpdateProgress(book)} onSelect={() => onBookSelect(book.id)} />))}</div>
-                ) : ( <EmptyState title="읽고 있는 책이 없습니다" message="새로운 책을 읽기 시작해보세요." action={<Button onClick={onAddBook}>+ 책 추가하기</Button>} /> )}
-            </Card>
-            <Card>
-                <h2 className="text-xl font-bold mb-4">최근 완독한 책</h2>
-                {recentBooks.length > 0 ? (
-// FIX: Explicitly type BookItem as a React Functional Component to fix issues with `key` prop.
-                    <div className="space-y-4">{recentBooks.map(book => <BookItem key={book.id} book={book} onSelect={() => onBookSelect(book.id)} />)}</div>
-                ) : ( <EmptyState title="아직 책이 없습니다" message="첫 완독 도서를 추가하여 시작하세요." action={<Button onClick={onAddBook}>첫 책 추가하기</Button>} /> )}
-            </Card>
-        </div>
-        <div className="space-y-8">
-            <Card>
-                <h2 className="text-xl font-bold mb-4">작업</h2>
-                <div className="flex flex-col space-y-3">
-                    <Button onClick={onAddBook}>+ 새 책 추가</Button>
-                    <Button onClick={onAddReview} variant="success">✏️ 서평 작성</Button>
-                    <Button onClick={onAddQuote} variant="secondary">❝ 글귀 추가</Button>
+const DashboardView = ({ stats, goalProgress, recentBooks, readingBooks, onAddBook, onAddReview, onAddQuote, onSetGoal, onBookSelect, onUpdateProgress }) => {
+    const [recentBooksPage, setRecentBooksPage] = useState(1);
+    const RECENT_BOOKS_PER_PAGE = 5;
+
+    const totalPages = Math.ceil(recentBooks.length / RECENT_BOOKS_PER_PAGE);
+    
+    // This handles the edge case where books are modified and the current page becomes invalid.
+    useEffect(() => {
+        if (recentBooksPage > totalPages && totalPages > 0) {
+            setRecentBooksPage(totalPages);
+        } else if (recentBooksPage < 1 && totalPages > 0) {
+            setRecentBooksPage(1);
+        }
+    }, [recentBooksPage, totalPages, recentBooks.length]);
+
+    const paginatedRecentBooks = recentBooks.slice(
+        (recentBooksPage - 1) * RECENT_BOOKS_PER_PAGE,
+        recentBooksPage * RECENT_BOOKS_PER_PAGE
+    );
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
+            <div className="lg:col-span-2 space-y-8">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <StatCard label="총 완독" value={stats?.completedBooks} />
+                    <StatCard label="올해 완독" value={stats?.thisYearBooks} />
+                    <StatCard label="이달 완독" value={stats?.thisMonthBooks} />
+                    <StatCard label="총 페이지" value={stats?.totalPages?.toLocaleString()} />
                 </div>
-            </Card>
-            <Card>
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><SparklesIcon/> AI 책 추천</h2>
-                 {isRecommending ? (
-                    <div className="text-center py-4"> <LoadingSpinner /> <p className="text-sm text-slate-500 mt-2">당신을 위한 책을 찾고 있어요...</p> </div>
-                 ) : recommendation ? (
-                    <div>
-                        <p className="text-sm text-slate-500">이런 책은 어떠세요?</p>
-                        <p className="font-bold text-lg mt-1">{recommendation.title}</p>
-                        <p className="text-sm text-slate-600 mb-4">{recommendation.author}</p>
-                        <div className="flex gap-2">
-                             <Button onClick={onAddRecommendationToWishlist} variant="success" className="flex-1">+ 읽고 싶은 책에 추가</Button>
-                             <Button onClick={onGetRecommendation} variant="secondary" className="!p-2.5"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.181-3.183m-4.991-2.69v-4.992m0 0h-4.992m4.992 0l-3.181-3.183a8.25 8.25 0 00-11.667 0L2.985 9.348z" /></svg></Button>
-                        </div>
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">읽고 있는 책</h2>
+                    {readingBooks.length > 0 ? (
+                        <div className="space-y-4">{readingBooks.map(book => (<CurrentlyReadingItem key={book.id} book={book} onUpdateProgress={() => onUpdateProgress(book)} onSelect={() => onBookSelect(book.id)} />))}</div>
+                    ) : ( <EmptyState title="읽고 있는 책이 없습니다" message="새로운 책을 읽기 시작해보세요." action={<Button onClick={onAddBook}>+ 책 추가하기</Button>} /> )}
+                </Card>
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">최근 완독한 책</h2>
+                    {recentBooks.length > 0 ? (
+                        <>
+                            <div className="space-y-4">
+                                {paginatedRecentBooks.map(book => <BookItem key={book.id} book={book} onSelect={() => onBookSelect(book.id)} />)}
+                            </div>
+                            {totalPages > 1 && (
+                                <div className="flex justify-center items-center gap-4 mt-6 pt-4 border-t border-slate-200">
+                                    <Button
+                                        onClick={() => setRecentBooksPage(p => Math.max(1, p - 1))}
+                                        disabled={recentBooksPage === 1}
+                                        variant="secondary"
+                                        className="!py-2 !px-4"
+                                    >
+                                        이전
+                                    </Button>
+                                    <span className="text-sm font-medium text-slate-600">
+                                        페이지 {recentBooksPage} / {totalPages}
+                                    </span>
+                                    <Button
+                                        onClick={() => setRecentBooksPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={recentBooksPage === totalPages}
+                                        variant="secondary"
+                                        className="!py-2 !px-4"
+                                    >
+                                        다음
+                                    </Button>
+                                </div>
+                            )}
+                        </>
+                    ) : ( <EmptyState title="아직 책이 없습니다" message="첫 완독 도서를 추가하여 시작하세요." action={<Button onClick={onAddBook}>첫 책 추가하기</Button>} /> )}
+                </Card>
+            </div>
+            <div className="space-y-8">
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">작업</h2>
+                    <div className="flex flex-col space-y-3">
+                        <Button onClick={onAddBook}>+ 새 책 추가</Button>
+                        <Button onClick={onAddReview} variant="success">✏️ 서평 작성</Button>
+                        <Button onClick={onAddQuote} variant="secondary">❝ 글귀 추가</Button>
                     </div>
-                 ) : ( <Button onClick={onGetRecommendation} variant="secondary" className="w-full gap-2">새로운 책 추천받기</Button> )}
-            </Card>
-            <Card>
-                <h2 className="text-xl font-bold mb-4">이달의 목표</h2>
-                {goalProgress && goalProgress.target > 0 ? (
-                    <div>
-                        <div className="flex justify-between items-baseline mb-1">
-                            <span className="font-semibold">{goalProgress.achieved} / {goalProgress.target} 권</span>
-                            <span className="text-2xl font-bold text-blue-600">{goalProgress.progress}%</span>
+                </Card>
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">이달의 목표</h2>
+                    {goalProgress && goalProgress.target > 0 ? (
+                        <div>
+                            <div className="flex justify-between items-baseline mb-1">
+                                <span className="font-semibold">{goalProgress.achieved} / {goalProgress.target} 권</span>
+                                <span className="text-2xl font-bold text-blue-600">{goalProgress.progress}%</span>
+                            </div>
+                            <ProgressBar progress={goalProgress.progress} />
+                             <Button onClick={onSetGoal} variant="secondary" className="w-full mt-4 !text-xs !py-1.5">목표 수정</Button>
                         </div>
-                        <ProgressBar progress={goalProgress.progress} />
-                         <Button onClick={onSetGoal} variant="secondary" className="w-full mt-4 !text-xs !py-1.5">목표 수정</Button>
-                    </div>
-                ) : ( <EmptyState title="설정된 목표 없음" message="이달의 목표를 설정하고 진행 상황을 추적하세요." action={<Button onClick={onSetGoal}>목표 설정</Button>} /> )}
-            </Card>
+                    ) : ( <EmptyState title="설정된 목표 없음" message="이달의 목표를 설정하고 진행 상황을 추적하세요." action={<Button onClick={onSetGoal}>목표 설정</Button>} /> )}
+                </Card>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 const LibraryView = ({ books, onBookSelect }) => {
     const [searchTerm, setSearchTerm] = useState('');
     // FIX: Explicitly typed the state for selectedTag.
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
     const allTags = useMemo(() => {
-        // FIX: Explicitly typed the Set to handle strings.
-        const tagSet = new Set<string>();
+        const tagCounts = new Map();
         books.forEach(book => {
             const bookTags = getTagsAsArray(book.tags);
-            bookTags.forEach(tag => tagSet.add(tag));
+            bookTags.forEach(tag => {
+                tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+            });
         });
-        return Array.from(tagSet).sort();
+
+        const sortedTags = Array.from(tagCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(entry => entry[0]);
+            
+        return sortedTags.sort((a, b) => a.localeCompare(b, 'ko'));
     }, [books]);
 
     const filteredBooks = useMemo(() => {
@@ -896,7 +897,7 @@ const LibraryView = ({ books, onBookSelect }) => {
             {allTags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-6 border-b pb-4">
                     <button onClick={() => setSelectedTag(null)} className={`text-sm font-medium px-3 py-1.5 rounded-lg transition ${!selectedTag ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>전체</button>
-                    {allTags.map(tag => ( <button key={tag} onClick={() => setSelectedTag(tag)} className={`text-sm font-medium px-3 py-1.5 rounded-lg transition ${selectedTag === tag ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>#{tag}</button> ))}
+                    {allTags.map(tag => ( <button key={tag} onClick={() => setSelectedTag(tag)} className={`text-sm font-medium px-3 py-1.5 rounded-lg transition ${selectedTag === tag ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>#{tag}</button>))}
                 </div>
             )}
             {filteredBooks.length > 0 ? (
@@ -956,13 +957,15 @@ const WishlistView = ({ books, onDataUpdate }) => {
 }
 const QuotesView = ({ quotes, refreshQuotes, showToast }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const QUOTES_PER_PAGE = 30;
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
     const filteredQuotes = useMemo(() => {
-        const sorted = [...quotes].sort((a, b) => {
-            if (a.pageNumber == null && b.pageNumber == null) return 0;
-            if (a.pageNumber == null) return 1;
-            if (b.pageNumber == null) return -1;
-            return a.pageNumber - b.pageNumber;
-        });
+        const sorted = [...quotes].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         if (!searchTerm) return sorted;
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
@@ -972,6 +975,13 @@ const QuotesView = ({ quotes, refreshQuotes, showToast }) => {
             (q.bookAuthor && q.bookAuthor.toLowerCase().includes(lowerCaseSearchTerm))
         );
     }, [quotes, searchTerm]);
+
+    const totalPages = Math.ceil(filteredQuotes.length / QUOTES_PER_PAGE);
+    const paginatedQuotes = useMemo(() => {
+        const startIndex = (currentPage - 1) * QUOTES_PER_PAGE;
+        return filteredQuotes.slice(startIndex, startIndex + QUOTES_PER_PAGE);
+    }, [filteredQuotes, currentPage]);
+
     const handleDelete = async (id) => {
         if (window.confirm('이 글귀를 정말 삭제하시겠습니까?')) {
             try {
@@ -987,25 +997,50 @@ const QuotesView = ({ quotes, refreshQuotes, showToast }) => {
     return (
         <Card className="animate-fade-in">
              <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <h2 className="text-2xl font-bold">글귀 모음 ({quotes.length})</h2>
+                <h2 className="text-2xl font-bold">글귀 모음 ({filteredQuotes.length})</h2>
                 <div className="flex items-center gap-2 w-full md:w-auto md:min-w-[300px]">
                     <SearchInput placeholder="글귀 내용, 책 제목으로 검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
             </div>
-             {filteredQuotes.length > 0 ? (
-                <div className="space-y-6">
-                    {filteredQuotes.map(quote => (
-                        <div key={quote.id} className="p-5 border-l-4 border-blue-500 bg-slate-100 rounded-r-lg group">
-                            <blockquote className="text-lg italic text-slate-700">"{quote.quoteText}"</blockquote>
-                            <footer className="mt-4 text-sm text-slate-500 flex justify-between items-center">
-                                <div><span className="font-semibold">{quote.bookTitle}</span> (저자: {quote.bookAuthor}){quote.pageNumber && `, p. ${quote.pageNumber}`}</div>
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button onClick={() => handleDelete(quote.id)} variant="danger" className="!p-2"><TrashIcon className="w-4 h-4"/></Button>
-                                </div>
-                            </footer>
+             {paginatedQuotes.length > 0 ? (
+                <>
+                    <div className="space-y-6">
+                        {paginatedQuotes.map(quote => (
+                            <div key={quote.id} className="p-5 border-l-4 border-blue-500 bg-slate-100 rounded-r-lg group">
+                                <blockquote className="text-lg italic text-slate-700">"{quote.quoteText}"</blockquote>
+                                <footer className="mt-4 text-sm text-slate-500 flex justify-between items-center">
+                                    <div><span className="font-semibold">{quote.bookTitle}</span> (저자: {quote.bookAuthor}){quote.pageNumber && `, p. ${quote.pageNumber}`}</div>
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button onClick={() => handleDelete(quote.id)} variant="danger" className="!p-2"><TrashIcon className="w-4 h-4"/></Button>
+                                    </div>
+                                </footer>
+                            </div>
+                        ))}
+                    </div>
+                    {totalPages > 1 && (
+                        <div className="flex justify-center items-center gap-4 mt-8">
+                            <Button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                variant="secondary"
+                                className="!py-2 !px-4"
+                            >
+                                이전
+                            </Button>
+                            <span className="text-sm font-medium text-slate-600">
+                                페이지 {currentPage} / {totalPages}
+                            </span>
+                            <Button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                variant="secondary"
+                                className="!py-2 !px-4"
+                            >
+                                다음
+                            </Button>
                         </div>
-                    ))}
-                </div>
+                    )}
+                </>
             // FIX: Provided null for the action prop when not used.
             ) : ( <EmptyState title="저장된 글귀 없음" message={searchTerm ? "검색 결과가 없습니다." : "읽은 책에서 인상 깊은 글귀를 추가하세요."} action={null}/> )}
         </Card>
@@ -1122,6 +1157,7 @@ const BookDetailView: React.FC<{ bookId: any, onBack: any, onDataUpdate: any, sh
                 await apiService.deleteQuote(quoteId);
                 showToast('글귀가 삭제되었습니다.');
                 fetchData();
+                onDataUpdate();
             } catch (error) {
                 showToast('글귀 삭제에 실패했습니다.', 'error');
                 console.error("Failed to delete quote", error);
@@ -1223,10 +1259,6 @@ const BookDetailView: React.FC<{ bookId: any, onBack: any, onDataUpdate: any, sh
 
 const AddBookModal = ({ isOpen, onClose, onBookAdded, showToast }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState([]);
-    const [isSearching, setIsSearching] = useState(false);
-
     const initialFormData = {
         title: '', author: '', status: 'completed',
         completionDate: new Date().toISOString().split('T')[0],
@@ -1238,43 +1270,12 @@ const AddBookModal = ({ isOpen, onClose, onBookAdded, showToast }) => {
     useEffect(() => {
         if (isOpen) {
             setFormData(initialFormData);
-            setSearchQuery('');
-            setSearchResults([]);
-            setIsSearching(false);
         }
     }, [isOpen]);
     
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleSearch = async (e) => {
-        e.preventDefault();
-        if (!searchQuery.trim()) return;
-        setIsSearching(true);
-        setSearchResults([]);
-        try {
-            const results = await apiService.searchBooks(searchQuery);
-            setSearchResults(results || []);
-        } catch (err) {
-            console.error(err);
-            showToast('책 검색에 실패했습니다.', 'error');
-        } finally {
-            setIsSearching(false);
-        }
-    };
-    
-    const handleSelectBook = (book) => {
-        setFormData(prev => ({
-            ...prev,
-            title: book.title || '',
-            author: book.authors?.join(', ') || '',
-            publisher: book.publisher || '',
-            pages: book.pageCount || '',
-        }));
-        setSearchResults([]);
-        setSearchQuery('');
     };
 
     const handleSubmit = async (e) => {
@@ -1288,8 +1289,10 @@ const AddBookModal = ({ isOpen, onClose, onBookAdded, showToast }) => {
         const tags = String(data.tags || '').split(',').map(t => t.trim()).filter(Boolean);
         try {
             await apiService.addBook({
-                title: data.title, author: data.author, status: data.status,
+                title: data.title,
+                author: data.author,
                 publisher: data.publisher || undefined,
+                status: data.status,
                 completionDate: data.status === 'completed' ? completionDate : undefined,
                 startedDate: data.status === 'reading' ? startedDate : undefined,
                 pages: Number(data.pages) || undefined,
@@ -1306,47 +1309,20 @@ const AddBookModal = ({ isOpen, onClose, onBookAdded, showToast }) => {
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="+ 새 책 추가">
-            <div className="space-y-4">
-                <form onSubmit={handleSearch} className="flex gap-2">
-                    <SearchInput 
-                        placeholder="책 제목으로 검색..." 
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="flex-grow"
-                    />
-                    <Button type="submit" variant="secondary" isLoading={isSearching}>검색</Button>
-                </form>
-
-                {isSearching && <div className="py-4"><LoadingSpinner/></div>}
-                
-                {searchResults.length > 0 && (
-                    <div className="border rounded-lg max-h-60 overflow-y-auto">
-                        <ul className="divide-y divide-slate-200">
-                            {searchResults.map((book, index) => (
-                                <li key={book.id || index} className="p-3 hover:bg-slate-100 cursor-pointer" onClick={() => handleSelectBook(book)}>
-                                    <p className="font-semibold text-slate-800">{book.title}</p>
-                                    <p className="text-sm text-slate-500">{book.authors?.join(', ')}</p>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
-
-                <form onSubmit={handleSubmit} className="border-t border-slate-200 pt-4 mt-4">
-                    <Input label="제목" id="title" name="title" type="text" required value={formData.title} onChange={handleInputChange} />
-                    <Input label="저자" id="author" name="author" type="text" required value={formData.author} onChange={handleInputChange} />
-                    <Select label="독서 상태" id="status" name="status" value={formData.status} onChange={handleInputChange} required>
-                        <option value="completed">완독</option><option value="reading">읽는 중</option><option value="wishlist">읽고 싶은 책</option>
-                    </Select>
-                    {formData.status === 'completed' && <Input label="완독일" id="completionDate" name="completionDate" type="date" required value={formData.completionDate} onChange={handleInputChange} />}
-                    {formData.status === 'reading' && <Input label="시작일" id="startedDate" name="startedDate" type="date" required value={formData.startedDate} onChange={handleInputChange} />}
-                    {(formData.status === 'completed' || formData.status === 'reading') && <Input label="총 페이지 수" id="pages" name="pages" type="number" value={formData.pages} onChange={handleInputChange} />}
-                    {formData.status === 'reading' && <Input label="현재 읽은 페이지" id="currentPage" name="currentPage" type="number" value={formData.currentPage} onChange={handleInputChange} />}
-                    <Input label="출판사" id="publisher" name="publisher" type="text" value={formData.publisher} onChange={handleInputChange} />
-                    <Input label="태그 (쉼표로 구분)" id="tags" name="tags" type="text" placeholder="예: 소설, 프로그래밍, 자기계발" value={formData.tags} onChange={handleInputChange} />
-                    <Button type="submit" className="w-full mt-4" isLoading={isSubmitting}>책 추가</Button>
-                </form>
-            </div>
+            <form onSubmit={handleSubmit}>
+                <Input label="제목" id="title" name="title" type="text" required value={formData.title} onChange={handleInputChange} />
+                <Input label="저자" id="author" name="author" type="text" required value={formData.author} onChange={handleInputChange} />
+                <Select label="독서 상태" id="status" name="status" value={formData.status} onChange={handleInputChange} required>
+                    <option value="completed">완독</option><option value="reading">읽는 중</option><option value="wishlist">읽고 싶은 책</option>
+                </Select>
+                {formData.status === 'completed' && <Input label="완독일" id="completionDate" name="completionDate" type="date" required value={formData.completionDate} onChange={handleInputChange} />}
+                {formData.status === 'reading' && <Input label="시작일" id="startedDate" name="startedDate" type="date" required value={formData.startedDate} onChange={handleInputChange} />}
+                {(formData.status === 'completed' || formData.status === 'reading') && <Input label="총 페이지 수" id="pages" name="pages" type="number" value={formData.pages} onChange={handleInputChange} />}
+                {formData.status === 'reading' && <Input label="현재 읽은 페이지" id="currentPage" name="currentPage" type="number" value={formData.currentPage} onChange={handleInputChange} />}
+                <Input label="출판사" id="publisher" name="publisher" type="text" value={formData.publisher} onChange={handleInputChange} />
+                <Input label="태그 (쉼표로 구분)" id="tags" name="tags" type="text" placeholder="예: 소설, 프로그래밍, 자기계발" value={formData.tags} onChange={handleInputChange} />
+                <Button type="submit" className="w-full mt-4" isLoading={isSubmitting}>책 추가</Button>
+            </form>
         </Modal>
     );
 };
@@ -1465,8 +1441,15 @@ const AddQuoteModal = ({ isOpen, onClose, onQuoteAdded, defaultBook }) => {
         const formData = new FormData(e.currentTarget);
         const data = Object.fromEntries(formData.entries());
         const bookId = defaultBook ? defaultBook.id : data.bookId;
+        const selectedBook = defaultBook || books.find(b => b.id === bookId);
         try {
-            await apiService.addQuote({ bookId: bookId, quoteText: data.quoteText, pageNumber: Number(data.pageNumber) || undefined });
+            await apiService.addQuote({
+                bookId: bookId,
+                bookTitle: selectedBook?.title,
+                bookAuthor: selectedBook?.author,
+                quoteText: data.quoteText,
+                pageNumber: Number(data.pageNumber) || undefined,
+            });
             onQuoteAdded();
             onClose();
         } catch (err) { console.error(err); }
